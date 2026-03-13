@@ -616,14 +616,14 @@ func TestFetchIssuesIncludesLabelFilter(t *testing.T) {
 
 	tr := newTrackerWithServer(srv.URL, "3")
 	tr.projectKey = "EXD"
-	tr.labels = []string{"ExuudEmailAgent"}
+	tr.labels = []string{"test-label"}
 
 	_, err := tr.FetchIssues(context.Background(), tracker.FetchOptions{State: "all"})
 	if err != nil {
 		t.Fatalf("FetchIssues error: %v", err)
 	}
 
-	if !strings.Contains(capturedJQL, `labels = "ExuudEmailAgent"`) {
+	if !strings.Contains(capturedJQL, `labels = "test-label"`) {
 		t.Errorf("JQL missing label filter, got: %s", capturedJQL)
 	}
 }
@@ -682,7 +682,7 @@ func TestInitLoadsLabelsFromConfig(t *testing.T) {
 			"jira.url":       "https://example.atlassian.net",
 			"jira.project":   "EXD",
 			"jira.api_token": "token123",
-			"jira.labels":    "ExuudEmailAgent",
+			"jira.labels":    "test-label",
 		},
 	}
 
@@ -691,8 +691,8 @@ func TestInitLoadsLabelsFromConfig(t *testing.T) {
 		t.Fatalf("Init error: %v", err)
 	}
 
-	if len(tr.labels) != 1 || tr.labels[0] != "ExuudEmailAgent" {
-		t.Errorf("labels = %v, want [ExuudEmailAgent]", tr.labels)
+	if len(tr.labels) != 1 || tr.labels[0] != "test-label" {
+		t.Errorf("labels = %v, want [test-label]", tr.labels)
 	}
 }
 
@@ -717,26 +717,26 @@ func TestInitLoadsMultipleLabelsFromConfig(t *testing.T) {
 }
 
 func TestEnsureLabelsAddsConfiguredLabels(t *testing.T) {
-	tr := &Tracker{labels: []string{"ExuudEmailAgent"}}
+	tr := &Tracker{labels: []string{"test-label"}}
 	fields := map[string]interface{}{}
 	tr.ensureLabels(fields)
 
 	labels, ok := fields["labels"].([]string)
-	if !ok || len(labels) != 1 || labels[0] != "ExuudEmailAgent" {
-		t.Errorf("labels = %v, want [ExuudEmailAgent]", fields["labels"])
+	if !ok || len(labels) != 1 || labels[0] != "test-label" {
+		t.Errorf("labels = %v, want [test-label]", fields["labels"])
 	}
 }
 
 func TestEnsureLabelsMergesWithExisting(t *testing.T) {
-	tr := &Tracker{labels: []string{"ExuudEmailAgent"}}
+	tr := &Tracker{labels: []string{"test-label"}}
 	fields := map[string]interface{}{
-		"labels": []string{"backend", "ExuudEmailAgent"},
+		"labels": []string{"backend", "test-label"},
 	}
 	tr.ensureLabels(fields)
 
 	labels := fields["labels"].([]string)
 	if len(labels) != 2 {
-		t.Errorf("labels = %v, want [backend ExuudEmailAgent] (no duplicates)", labels)
+		t.Errorf("labels = %v, want [backend test-label] (no duplicates)", labels)
 	}
 }
 
@@ -768,7 +768,7 @@ func TestCreateIssueIncludesConfiguredLabels(t *testing.T) {
 
 	tr := newTrackerWithServer(srv.URL, "3")
 	tr.projectKey = "EXD"
-	tr.labels = []string{"ExuudEmailAgent"}
+	tr.labels = []string{"test-label"}
 
 	_, _ = tr.CreateIssue(context.Background(), &types.Issue{
 		Title:  "Test",
@@ -786,12 +786,12 @@ func TestCreateIssueIncludesConfiguredLabels(t *testing.T) {
 
 	found := false
 	for _, l := range payload.Fields.Labels {
-		if l == "ExuudEmailAgent" {
+		if l == "test-label" {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("labels = %v, should contain ExuudEmailAgent", payload.Fields.Labels)
+		t.Errorf("labels = %v, should contain test-label", payload.Fields.Labels)
 	}
 }
 
