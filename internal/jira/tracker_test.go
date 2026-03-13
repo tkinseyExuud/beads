@@ -599,6 +599,123 @@ func (s *configStore) RunInTransaction(_ context.Context, _ string, _ func(tx st
 }
 func (s *configStore) Close() error { return nil }
 
+func TestFetchIssuesIncludesLabelFilter(t *testing.T) {
+	var capturedJQL string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedJQL = r.URL.Query().Get("jql")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(SearchResult{
+			StartAt:    0,
+			MaxResults: 100,
+			Total:      0,
+			Issues:     nil,
+		})
+	}))
+	defer srv.Close()
+
+	tr := newTrackerWithServer(srv.URL, "3")
+	tr.projectKey = "EXD"
+	tr.labels = []string{"ExuudEmailAgent"}
+
+	_, err := tr.FetchIssues(context.Background(), tracker.FetchOptions{State: "all"})
+	if err != nil {
+		t.Fatalf("FetchIssues error: %v", err)
+	}
+
+	if !strings.Contains(capturedJQL, `labels = "ExuudEmailAgent"`) {
+		t.Errorf("JQL missing label filter, got: %s", capturedJQL)
+	}
+}
+
+func TestFetchIssuesMultipleLabels(t *testing.T) {
+	var capturedJQL string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedJQL = r.URL.Query().Get("jql")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(SearchResult{Total: 0})
+	}))
+	defer srv.Close()
+
+	tr := newTrackerWithServer(srv.URL, "3")
+	tr.projectKey = "EXD"
+	tr.labels = []string{"backend", "team-alpha"}
+
+	_, err := tr.FetchIssues(context.Background(), tracker.FetchOptions{State: "all"})
+	if err != nil {
+		t.Fatalf("FetchIssues error: %v", err)
+	}
+
+	if !strings.Contains(capturedJQL, `labels = "backend"`) || !strings.Contains(capturedJQL, `labels = "team-alpha"`) {
+		t.Errorf("JQL missing multi-label filter, got: %s", capturedJQL)
+	}
+}
+
+func TestFetchIssuesNoLabelsNoFilter(t *testing.T) {
+	var capturedJQL string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedJQL = r.URL.Query().Get("jql")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(SearchResult{Total: 0})
+	}))
+	defer srv.Close()
+
+	tr := newTrackerWithServer(srv.URL, "3")
+	tr.projectKey = "EXD"
+	// No labels set
+
+	_, err := tr.FetchIssues(context.Background(), tracker.FetchOptions{State: "all"})
+	if err != nil {
+		t.Fatalf("FetchIssues error: %v", err)
+	}
+
+	if strings.Contains(capturedJQL, "labels") {
+		t.Errorf("JQL should not contain label filter when no labels configured, got: %s", capturedJQL)
+	}
+}
+
+func TestInitLoadsLabelsFromConfig(t *testing.T) {
+	store := &configStore{
+		data: map[string]string{
+			"jira.url":       "https://example.atlassian.net",
+			"jira.project":   "EXD",
+			"jira.api_token": "token123",
+			"jira.labels":    "ExuudEmailAgent",
+		},
+	}
+
+	tr := &Tracker{}
+	if err := tr.Init(context.Background(), store); err != nil {
+		t.Fatalf("Init error: %v", err)
+	}
+
+	if len(tr.labels) != 1 || tr.labels[0] != "ExuudEmailAgent" {
+		t.Errorf("labels = %v, want [ExuudEmailAgent]", tr.labels)
+	}
+}
+
+func TestInitLoadsMultipleLabelsFromConfig(t *testing.T) {
+	store := &configStore{
+		data: map[string]string{
+			"jira.url":       "https://example.atlassian.net",
+			"jira.project":   "EXD",
+			"jira.api_token": "token123",
+			"jira.labels":    "backend, team-alpha",
+		},
+	}
+
+	tr := &Tracker{}
+	if err := tr.Init(context.Background(), store); err != nil {
+		t.Fatalf("Init error: %v", err)
+	}
+
+	if len(tr.labels) != 2 || tr.labels[0] != "backend" || tr.labels[1] != "team-alpha" {
+		t.Errorf("labels = %v, want [backend team-alpha]", tr.labels)
+	}
+}
+
 func TestInitLoadsCustomStatusMapFromAllConfig(t *testing.T) {
 	store := &configStore{
 		data: map[string]string{

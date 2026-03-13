@@ -26,6 +26,7 @@ type Tracker struct {
 	projectKey string
 	apiVersion string            // "2" or "3" (default: "3")
 	statusMap  map[string]string // beads status → Jira status name (from jira.status_map.* config)
+	labels     []string          // optional label filter for JQL queries (from jira.labels config)
 }
 
 func (t *Tracker) Name() string         { return "jira" }
@@ -77,6 +78,19 @@ func (t *Tracker) Init(ctx context.Context, store storage.Storage) error {
 		}
 	}
 
+	// Load optional label filter. When set, only Jira issues matching ALL specified
+	// labels are synced. Comma-separated for multiple labels.
+	// Example: bd config set jira.labels "ExuudEmailAgent"
+	// Example: bd config set jira.labels "backend,team-alpha"
+	if labelsStr, err := t.getConfig(ctx, "jira.labels", "JIRA_LABELS"); err == nil && labelsStr != "" {
+		for _, l := range strings.Split(labelsStr, ",") {
+			l = strings.TrimSpace(l)
+			if l != "" {
+				t.labels = append(t.labels, l)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -92,6 +106,11 @@ func (t *Tracker) Close() error { return nil }
 func (t *Tracker) FetchIssues(ctx context.Context, opts tracker.FetchOptions) ([]tracker.TrackerIssue, error) {
 	// Build JQL query
 	jql := fmt.Sprintf("project = %q", t.projectKey)
+
+	// Label filter: only sync issues matching ALL specified labels
+	for _, label := range t.labels {
+		jql += fmt.Sprintf(" AND labels = %q", label)
+	}
 
 	// State filter
 	switch opts.State {
