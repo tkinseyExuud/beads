@@ -174,9 +174,6 @@ func (t *Tracker) UpdateIssue(ctx context.Context, externalID string, issue *typ
 	mapper := t.FieldMapper()
 	fields := mapper.IssueToTracker(issue)
 
-	// Ensure configured labels are included on push
-	t.ensureLabels(fields)
-
 	if err := t.client.UpdateIssue(ctx, externalID, fields); err != nil {
 		return nil, err
 	}

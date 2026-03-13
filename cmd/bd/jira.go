@@ -208,8 +208,11 @@ func buildJiraPushHooks(ctx context.Context) *tracker.PushHooks {
 			// Label filter: when jira.labels is set, only push issues that
 			// carry ALL of the configured labels. This keeps the push side
 			// symmetric with the pull filter added in tracker.go.
+			//
+			// Exception: new issues (no ExternalRef) are always allowed
+			// through — ensureLabels in CreateIssue will tag them in Jira.
 			labelsStr, _ := store.GetConfig(ctx, "jira.labels")
-			if labelsStr != "" {
+			if labelsStr != "" && issue.ExternalRef != nil {
 				issueLabels := make(map[string]bool, len(issue.Labels))
 				for _, l := range issue.Labels {
 					issueLabels[l] = true
