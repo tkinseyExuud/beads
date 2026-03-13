@@ -25,6 +25,8 @@ Configuration:
   bd config set jira.username "your_email@company.com"  # For Jira Cloud
   bd config set jira.push_prefix "hippo"       # Only push hippo-* issues to Jira
   bd config set jira.push_prefix "proj1,proj2" # Multiple prefixes (comma-separated)
+  bd config set jira.labels "MyLabel"          # Only sync issues with this Jira label
+  bd config set jira.labels "label1,label2"    # Multiple labels (ALL must match)
 
 Environment variables (alternative to config):
   JIRA_API_TOKEN - Jira API token
@@ -186,18 +188,41 @@ func runJiraSync(cmd *cobra.Command, args []string) {
 func buildJiraPushHooks(ctx context.Context) *tracker.PushHooks {
 	return &tracker.PushHooks{
 		ShouldPush: func(issue *types.Issue) bool {
+			// Prefix filter: only push issues matching jira.push_prefix
 			pushPrefix, _ := store.GetConfig(ctx, "jira.push_prefix")
-			if pushPrefix == "" {
-				return true
-			}
-			for _, prefix := range strings.Split(pushPrefix, ",") {
-				prefix = strings.TrimSpace(prefix)
-				prefix = strings.TrimSuffix(prefix, "-")
-				if prefix != "" && strings.HasPrefix(issue.ID, prefix+"-") {
-					return true
+			if pushPrefix != "" {
+				matched := false
+				for _, prefix := range strings.Split(pushPrefix, ",") {
+					prefix = strings.TrimSpace(prefix)
+					prefix = strings.TrimSuffix(prefix, "-")
+					if prefix != "" && strings.HasPrefix(issue.ID, prefix+"-") {
+						matched = true
+						break
+					}
+				}
+				if !matched {
+					return false
 				}
 			}
-			return false
+
+			// Label filter: when jira.labels is set, only push issues that
+			// carry ALL of the configured labels. This keeps the push side
+			// symmetric with the pull filter added in tracker.go.
+			labelsStr, _ := store.GetConfig(ctx, "jira.labels")
+			if labelsStr != "" {
+				issueLabels := make(map[string]bool, len(issue.Labels))
+				for _, l := range issue.Labels {
+					issueLabels[l] = true
+				}
+				for _, required := range strings.Split(labelsStr, ",") {
+					required = strings.TrimSpace(required)
+					if required != "" && !issueLabels[required] {
+						return false
+					}
+				}
+			}
+
+			return true
 		},
 	}
 }
