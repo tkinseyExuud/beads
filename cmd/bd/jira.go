@@ -205,14 +205,25 @@ func buildJiraPushHooks(ctx context.Context) *tracker.PushHooks {
 				}
 			}
 
-			// Label filter: when jira.labels is set, only push issues that
-			// carry ALL of the configured labels. This keeps the push side
-			// symmetric with the pull filter added in tracker.go.
+			// Label filter: when jira.labels is set, control which issues
+			// are pushed to Jira.
 			//
-			// Exception: new issues (no ExternalRef) are always allowed
-			// through — ensureLabels in CreateIssue will tag them in Jira.
+			// - New issues (no ExternalRef): always allowed through.
+			//   ensureLabels in CreateIssue will tag them in Jira.
+			// - Issues with a Jira ExternalRef: always allowed through.
+			//   They were pulled via the label-filtered JQL, so they
+			//   belong to this project. (Beads doesn't persist Jira
+			//   labels locally, so we can't check issue.Labels here.)
+			// - Issues with a non-Jira ExternalRef: blocked if they
+			//   don't carry the required labels locally.
 			labelsStr, _ := store.GetConfig(ctx, "jira.labels")
+			jiraURL, _ := store.GetConfig(ctx, "jira.url")
 			if labelsStr != "" && issue.ExternalRef != nil {
+				// If it has a Jira external ref, it came from our filtered pull — allow it
+				if jira.IsJiraExternalRef(*issue.ExternalRef, jiraURL) {
+					return true
+				}
+				// Non-Jira external ref: check local labels
 				issueLabels := make(map[string]bool, len(issue.Labels))
 				for _, l := range issue.Labels {
 					issueLabels[l] = true
