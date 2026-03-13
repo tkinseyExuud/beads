@@ -158,6 +158,9 @@ func (t *Tracker) CreateIssue(ctx context.Context, issue *types.Issue) (*tracker
 	// Set project
 	fields["project"] = map[string]string{"key": t.projectKey}
 
+	// Ensure configured labels are included on push
+	t.ensureLabels(fields)
+
 	created, err := t.client.CreateIssue(ctx, fields)
 	if err != nil {
 		return nil, err
@@ -170,6 +173,9 @@ func (t *Tracker) CreateIssue(ctx context.Context, issue *types.Issue) (*tracker
 func (t *Tracker) UpdateIssue(ctx context.Context, externalID string, issue *types.Issue) (*tracker.TrackerIssue, error) {
 	mapper := t.FieldMapper()
 	fields := mapper.IssueToTracker(issue)
+
+	// Ensure configured labels are included on push
+	t.ensureLabels(fields)
 
 	if err := t.client.UpdateIssue(ctx, externalID, fields); err != nil {
 		return nil, err
@@ -242,6 +248,27 @@ func (t *Tracker) ExtractIdentifier(ref string) string {
 
 func (t *Tracker) BuildExternalRef(issue *tracker.TrackerIssue) string {
 	return fmt.Sprintf("%s/browse/%s", t.jiraURL, issue.Identifier)
+}
+
+// ensureLabels merges the tracker's configured labels into the fields map,
+// so that issues pushed to Jira always carry the filter labels.
+func (t *Tracker) ensureLabels(fields map[string]interface{}) {
+	if len(t.labels) == 0 {
+		return
+	}
+
+	existing, _ := fields["labels"].([]string)
+	seen := make(map[string]bool, len(existing))
+	for _, l := range existing {
+		seen[l] = true
+	}
+	for _, l := range t.labels {
+		if !seen[l] {
+			existing = append(existing, l)
+			seen[l] = true
+		}
+	}
+	fields["labels"] = existing
 }
 
 // getConfig reads a config value from storage, falling back to env var.
